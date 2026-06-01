@@ -1,0 +1,428 @@
+{% extends 'base.html' %}
+
+{% block title %}Admin Dashboard{% endblock %}
+
+{% block content %}
+<div class="dashboard-header">
+    <h2>Dashboard Overview</h2>
+</div>
+
+<div class="dashboard-stats">
+    <div class="stat-card">
+        <i class="fas fa-door-open"></i>
+        <h3>{{ total_rooms }}</h3>
+        <p>Total Rooms</p>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-calendar-check"></i>
+        <h3>{{ total_bookings }}</h3>
+        <p>Total Bookings</p>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-clock"></i>
+        <h3>{{ pending_requests }}</h3>
+        <p>Pending Requests</p>
+    </div>
+    <div class="stat-card">
+        <i class="fas fa-bed"></i>
+        <h3>{{ available_rooms }}</h3>
+        <p>Available Rooms</p>
+    </div>
+</div>
+
+<div class="dashboard-header" style="display: flex; justify-content: space-between; align-items: center;">
+    <h2>Room Management</h2>
+    <button class="btn btn-primary" onclick="document.getElementById('addRoomModal').classList.add('active')">
+        <i class="fas fa-plus"></i> Add New Room
+    </button>
+</div>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Room #</th>
+                <th>Category</th>
+                <th>Price</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for room in rooms %}
+            <tr>
+                <td>{{ room.room_number }}</td>
+                <td>{{ room.category }}</td>
+                <td>${{ "%.2f"|format(room.price) }}</td>
+                <td>
+                    {% if room.availability %}
+                    <span class="badge badge-approved">Available</span>
+                    {% else %}
+                    <span class="badge badge-rejected">Occupied</span>
+                    {% endif %}
+                </td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="openEditRoomModal({{ room.id }}, '{{ room.room_number }}', '{{ room.category }}', {{ room.price }}, '{{ room.description or '' }}', {{ room.capacity }}, '{{ room.amenities }}')"><i class="fas fa-edit"></i></button>
+                    <a href="{{ url_for('delete_room', room_id=room.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure?')"><i class="fas fa-trash"></i></a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="dashboard-header">
+    <h2>Recent Bookings</h2>
+</div>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>Booking ID</th>
+                <th>Guest</th>
+                <th>Room</th>
+                <th>Check In</th>
+                <th>Check Out</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for booking in bookings %}
+            <tr>
+                <td>#{{ booking.id }}</td>
+                <td>{{ booking.user.username }}</td>
+                <td>{{ booking.room.room_number }}</td>
+                <td>{{ booking.check_in.strftime('%Y-%m-%d') }}</td>
+                <td>{{ booking.check_out.strftime('%Y-%m-%d') }}</td>
+                <td>
+                    {% if booking.status == 'Pending' %}
+                    <span class="badge badge-pending">Pending</span>
+                    {% elif booking.status == 'Approved' %}
+                    <span class="badge badge-approved">Approved</span>
+                    {% else %}
+                    <span class="badge badge-rejected">{{ booking.status }}</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if booking.status == 'Awaiting Approval' %}
+                    <a href="{{ url_for('update_booking_status', booking_id=booking.id, status='Approved') }}" class="btn btn-success btn-sm" title="Approve"><i class="fas fa-check"></i></a>
+                    <a href="{{ url_for('update_booking_status', booking_id=booking.id, status='Rejected') }}" class="btn btn-danger btn-sm" title="Reject"><i class="fas fa-times"></i></a>
+                    {% elif booking.status == 'Approved' %}
+                    <a href="{{ url_for('update_booking_status', booking_id=booking.id, status='Checked-in') }}" class="btn btn-primary btn-sm" title="Mark Checked-in"><i class="fas fa-sign-in-alt"></i></a>
+                    {% elif booking.status == 'Checked-in' %}
+                    <a href="{{ url_for('update_booking_status', booking_id=booking.id, status='Completed') }}" class="btn btn-success btn-sm" title="Mark Completed"><i class="fas fa-check-double"></i></a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div class="dashboard-header">
+    <h2>User Management</h2>
+</div>
+<div class="table-container">
+    <table>
+        <thead>
+            <tr>
+                <th>User ID</th>
+                <th>Name</th>
+                <th>Email</th>
+                <th>Role</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for u in users %}
+            <tr>
+                <td>{{ u.id }}</td>
+                <td>{{ u.username }}</td>
+                <td>{{ u.email }}</td>
+                <td>
+                    <span class="badge {% if u.role == 'admin' %}badge-approved{% else %}badge-pending{% endif %}">
+                        {{ u.role|capitalize }}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-outline btn-sm" onclick="openEditUserModal({{ u.id }}, '{{ u.username }}', '{{ u.email }}', '{{ u.role }}')"><i class="fas fa-edit"></i></button>
+                    {% if u.id != current_user.id %}
+                    <a href="{{ url_for('delete_user', user_id=u.id) }}" class="btn btn-danger btn-sm" onclick="return confirm('Are you sure you want to delete this user? All their bookings will also be deleted.')"><i class="fas fa-trash"></i></a>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Add Room Modal -->
+<style>
+    .enhanced-modal-content {
+        border-radius: 15px !important;
+        overflow: hidden;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.3) !important;
+    }
+    .enhanced-modal-left {
+        background: linear-gradient(145deg, #f8f9fa 0%, #e9ecef 100%) !important;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        position: relative;
+    }
+    .enhanced-modal-left::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: url('https://www.transparenttextures.com/patterns/cubes.png');
+        opacity: 0.05;
+        pointer-events: none;
+    }
+    .img-preview-wrapper {
+        position: relative;
+        width: 100%;
+        height: 280px;
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.15);
+        margin-bottom: 25px;
+        background: #dee2e6;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .img-preview-wrapper img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        transition: transform 0.5s ease;
+    }
+    .img-preview-wrapper:hover img {
+        transform: scale(1.05);
+    }
+    .enhanced-amenities-box {
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        box-shadow: 0 5px 20px rgba(0,0,0,0.04);
+        position: relative;
+        z-index: 1;
+    }
+    .form-grid-2 {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        margin-bottom: 15px;
+    }
+    .enhanced-input {
+        background: #f8f9fa !important;
+        border: 1px solid #ced4da !important;
+        transition: all 0.3s ease;
+    }
+    .enhanced-input:focus {
+        background: #fff !important;
+        box-shadow: 0 0 0 4px rgba(212, 175, 55, 0.15) !important;
+        border-color: var(--gold) !important;
+    }
+    .btn-publish {
+        width: 100%;
+        padding: 14px !important;
+        font-size: 1.1rem !important;
+        border-radius: 8px !important;
+        box-shadow: 0 6px 20px rgba(212, 175, 55, 0.3) !important;
+        margin-top: 10px;
+    }
+    .btn-publish:hover {
+        transform: translateY(-3px) !important;
+        box-shadow: 0 8px 25px rgba(212, 175, 55, 0.4) !important;
+    }
+</style>
+<div id="addRoomModal" class="modal modal-split">
+    <div class="modal-content enhanced-modal-content">
+        <span class="close-modal" onclick="document.getElementById('addRoomModal').classList.remove('active')" style="background: white; width: 35px; height: 35px; display: flex; align-items: center; justify-content: center; border-radius: 50%; box-shadow: 0 2px 10px rgba(0,0,0,0.1); right: 15px; top: 15px;">&times;</span>
+        
+        <div class="modal-left enhanced-modal-left">
+            <div class="img-preview-wrapper">
+                <img id="addRoomImagePreview" src="https://images.unsplash.com/photo-1566665797739-1674de7a421a?ixlib=rb-1.2.1&auto=format&fit=crop&w=800&q=80" alt="Room Preview">
+            </div>
+            <h3 style="font-size: 2.2rem; color: var(--navy); margin-bottom: 8px;">Create a Sanctuary</h3>
+            <p style="color: var(--muted); font-size: 1.05rem; margin-bottom: 25px; line-height: 1.5;">Design a new space for our guests to experience ultimate comfort and luxury.</p>
+            
+            <div class="enhanced-amenities-box">
+                <h4 style="margin-bottom: 15px; font-size: 1rem; color: var(--navy); border-bottom: 1px solid var(--border); padding-bottom: 10px; font-family: 'Inter', sans-serif;"><i class="fas fa-gem" style="color: var(--gold); margin-right: 8px;"></i>Standard Inclusions</h4>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+                    <div class="modal-amenity"><i class="fas fa-bed" style="color: var(--gold); font-size: 1.2rem;"></i> <span style="font-weight: 500;">Premium Bedding</span></div>
+                    <div class="modal-amenity"><i class="fas fa-wifi" style="color: var(--gold); font-size: 1.2rem;"></i> <span style="font-weight: 500;">High-Speed WiFi</span></div>
+                    <div class="modal-amenity"><i class="fas fa-tv" style="color: var(--gold); font-size: 1.2rem;"></i> <span style="font-weight: 500;">Smart TV 4K</span></div>
+                    <div class="modal-amenity"><i class="fas fa-concierge-bell" style="color: var(--gold); font-size: 1.2rem;"></i> <span style="font-weight: 500;">24/7 Service</span></div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="modal-right" style="padding: 45px 50px;">
+            <h3 style="margin-bottom: 30px; color: var(--navy); font-family: 'Playfair Display', serif; font-size: 2rem; display: flex; align-items: center; gap: 12px;">
+                <i class="fas fa-plus-circle" style="color: var(--gold);"></i> Room Details
+            </h3>
+            <form action="{{ url_for('add_room') }}" method="POST" enctype="multipart/form-data">
+                <div class="form-grid-2">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.95rem;"><i class="fas fa-hashtag" style="color: var(--muted); margin-right: 6px;"></i>Room Number</label>
+                        <input type="text" name="room_number" class="form-control enhanced-input" required placeholder="e.g. 101">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.95rem;"><i class="fas fa-tags" style="color: var(--muted); margin-right: 6px;"></i>Category</label>
+                        <select name="category" class="form-control enhanced-input" required>
+                            <option value="Standard">Standard</option>
+                            <option value="Deluxe">Deluxe</option>
+                            <option value="Suite">Suite</option>
+                            <option value="Presidential">Presidential</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-grid-2">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.95rem;"><i class="fas fa-dollar-sign" style="color: var(--muted); margin-right: 6px;"></i>Price per night</label>
+                        <input type="number" name="price" class="form-control enhanced-input" step="0.01" required placeholder="0.00">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label style="font-size: 0.95rem;"><i class="fas fa-users" style="color: var(--muted); margin-right: 6px;"></i>Capacity</label>
+                        <input type="number" name="capacity" class="form-control enhanced-input" required value="4">
+                    </div>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 0.95rem;"><i class="fas fa-star" style="color: var(--muted); margin-right: 6px;"></i>Additional Amenities</label>
+                    <input type="text" name="amenities" class="form-control enhanced-input" placeholder="e.g. Ocean View, Mini Bar" value="Free WiFi, Air Conditioning, Smart TV">
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 15px;">
+                    <label style="font-size: 0.95rem;"><i class="fas fa-align-left" style="color: var(--muted); margin-right: 6px;"></i>Description</label>
+                    <textarea name="description" class="form-control enhanced-input" rows="3" placeholder="Describe the room's unique features..."></textarea>
+                </div>
+                
+                <div class="form-group" style="margin-bottom: 25px;">
+                    <label style="font-size: 0.95rem;"><i class="fas fa-image" style="color: var(--muted); margin-right: 6px;"></i>Room Image</label>
+                    <input type="file" name="image" id="addRoomImageInput" class="form-control enhanced-input" accept="image/*" style="padding: 10px; border: 2px dashed #ced4da; background: #f8f9fa; cursor: pointer;" onchange="previewAddRoomImage(event)">
+                </div>
+                
+                <button type="submit" class="btn btn-primary btn-publish">
+                    <i class="fas fa-check-circle" style="margin-right: 8px;"></i> Publish Room
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function previewAddRoomImage(event) {
+        const reader = new FileReader();
+        reader.onload = function(){
+            const output = document.getElementById('addRoomImagePreview');
+            output.src = reader.result;
+        };
+        if(event.target.files[0]) {
+            reader.readAsDataURL(event.target.files[0]);
+        }
+    }
+</script>
+
+<!-- Edit Room Modal -->
+<div id="editRoomModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="document.getElementById('editRoomModal').classList.remove('active')">&times;</span>
+        <h3>Edit Room</h3>
+        <br>
+        <form id="editRoomForm" method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+                <label>Room Number</label>
+                <input type="text" name="room_number" id="editRoomNumber" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Category</label>
+                <select name="category" id="editCategory" class="form-control" required>
+                    <option value="Standard">Standard</option>
+                    <option value="Deluxe">Deluxe</option>
+                    <option value="Suite">Suite</option>
+                    <option value="Presidential">Presidential</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Price per night ($)</label>
+                <input type="number" name="price" id="editPrice" class="form-control" step="0.01" required>
+            </div>
+            <div style="display: flex; gap: 10px;">
+                <div class="form-group" style="flex: 1;">
+                    <label>Capacity</label>
+                    <input type="number" name="capacity" id="editCapacity" class="form-control" required>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>Amenities</label>
+                <input type="text" name="amenities" id="editAmenities" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Description</label>
+                <textarea name="description" id="editDescription" class="form-control" rows="3"></textarea>
+            </div>
+            <div class="form-group">
+                <label>Update Room Image (Optional)</label>
+                <input type="file" name="image" class="form-control" accept="image/*">
+            </div>
+            <button type="submit" class="btn btn-primary auth-btn">Update Room</button>
+        </form>
+    </div>
+</div>
+
+<script>
+    function openEditRoomModal(id, number, category, price, desc, capacity, amenities) {
+        document.getElementById('editRoomForm').action = '/admin/edit_room/' + id;
+        document.getElementById('editRoomNumber').value = number;
+        document.getElementById('editCategory').value = category;
+        document.getElementById('editPrice').value = price;
+        document.getElementById('editDescription').value = desc;
+        document.getElementById('editCapacity').value = capacity;
+        document.getElementById('editAmenities').value = amenities;
+        document.getElementById('editRoomModal').classList.add('active');
+    }
+
+    function openEditUserModal(id, name, email, role) {
+        document.getElementById('editUserForm').action = '/admin/edit_user/' + id;
+        document.getElementById('editUserName').value = name;
+        document.getElementById('editUserEmail').value = email;
+        document.getElementById('editUserRole').value = role;
+        document.getElementById('editUserModal').classList.add('active');
+    }
+</script>
+
+<!-- Edit User Modal -->
+<div id="editUserModal" class="modal">
+    <div class="modal-content">
+        <span class="close-modal" onclick="document.getElementById('editUserModal').classList.remove('active')">&times;</span>
+        <h3>Edit User Info</h3>
+        <br>
+        <form id="editUserForm" method="POST">
+            <div class="form-group">
+                <label>Full Name</label>
+                <input type="text" name="username" id="editUserName" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Email</label>
+                <input type="email" name="email" id="editUserEmail" class="form-control" required>
+            </div>
+            <div class="form-group">
+                <label>Role</label>
+                <select name="role" id="editUserRole" class="form-control" required>
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Reset Password (leave blank to keep current)</label>
+                <input type="password" name="password" class="form-control" placeholder="New Password">
+            </div>
+            <button type="submit" class="btn btn-primary auth-btn">Update User</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
